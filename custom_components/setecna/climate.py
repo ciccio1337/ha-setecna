@@ -15,7 +15,7 @@ from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from .const import DOMAIN, CONF_SYSTEM_ID
-from .params import build_param_map
+from .params import build_param_map, zone_label
 
 _LOGGER = logging.getLogger(__name__)
 PRESET_FORCED_OFF = "forced off"
@@ -31,7 +31,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, add: AddEnt
     coord = hass.data[DOMAIN][entry.entry_id]
     sid = entry.data[CONF_SYSTEM_ID]
     pmap = build_param_map(coord.data or {})
-    zones = sorted({p.zone for p in pmap.values() if p.zone})
+    # solo le zone che regolano: le sonde di sola lettura non hanno setpoint
+    zones = sorted({p.zone for p in pmap.values() if p.zone and f"Z{p.zone}_ZONE_SET" in pmap})
     has_rh = {z: f"Z{z}_RH" in pmap for z in zones}
     add(SetecnaZoneClimate(coord, sid, z, has_rh[z]) for z in zones)
 
@@ -60,8 +61,7 @@ class SetecnaZoneClimate(CoordinatorEntity, ClimateEntity):
         self._z = zone
         self._has_rh = has_humidity
         self._attr_unique_id = f"{system_id}_zone_{zone}"
-        desc = (coordinator.data or {}).get(f"_FREEDESC{zone}")
-        self._attr_name = desc or f"Zone {zone}"
+        self._attr_name = zone_label(coordinator.data or {}, zone) or f"Zone {zone}"
         feats = ClimateEntityFeature.TARGET_TEMPERATURE_RANGE | ClimateEntityFeature.PRESET_MODE
         if has_humidity:
             feats |= ClimateEntityFeature.TARGET_HUMIDITY

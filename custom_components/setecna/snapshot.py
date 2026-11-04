@@ -14,6 +14,7 @@ from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.storage import Store
 from .const import DOMAIN
+from .params import zone_regulated
 
 _LOGGER = logging.getLogger(__name__)
 STORE_KEY = f"{DOMAIN}_snapshot"
@@ -34,7 +35,8 @@ RESTORE_SCHEMA = vol.Schema({
 
 
 def _zone_indexes(data: dict) -> list[int]:
-    return [i for i in range(1, 33) if data.get(f"Z{i}_SENSOR_CHN", "0") not in ("0", None, "") and f"Z{i}_FORCING" in data]
+    return [i for i in range(1, 33) if data.get(f"Z{i}_SENSOR_CHN", "0") not in ("0", None, "")
+            and f"Z{i}_FORCING" in data and zone_regulated(data, i)]
 
 
 async def async_register_snapshot_services(hass: HomeAssistant, coordinator) -> None:

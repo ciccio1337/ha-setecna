@@ -53,6 +53,33 @@ def _binary(key, name, **kw):
     return ParamDef(key, name, "binary_sensor", transform="binary", **kw)
 
 
+# 32768/32769 (0x8000/0x8001) = sonda assente o non ancora letta
+MISSING = ("32768", "32769")
+
+
+def zone_label(raw: dict[str, str], zone: int) -> str | None:
+    """Nome della zona dal suo descrittore Z{i}_DESCR.
+
+    I descrittori 240-255 indicizzano _FREEDESC1-16 (nomi delle zone) e
+    192-239 _XFREEDESC1-48 (circuiti, sorgenti, sonde): es. 242 → _FREEDESC3,
+    201 → _XFREEDESC10. _FREEDESC{zona} preso per indice non corrisponde.
+    """
+    try:
+        d = int(raw.get(f"Z{zone}_DESCR", "0"))
+    except ValueError:
+        return None
+    if 240 <= d <= 255:
+        return raw.get(f"_FREEDESC{d - 239}") or None
+    if 192 <= d <= 239:
+        return raw.get(f"_XFREEDESC{d - 191}") or None
+    return None
+
+
+def zone_regulated(raw: dict[str, str], zone: int) -> bool:
+    """La zona pilota un circuito (CFG2 = circuito×16); 0 = sola sonda di lettura."""
+    return raw.get(f"Z{zone}_CFG2", "0") != "0"
+
+
 def build_param_map(raw: dict[str, str], read_only: bool = False) -> dict[str, ParamDef]:
     """Costruisce la mappa Id→ParamDef rispecchiando le condizioni dell'addon."""
     m: dict[str, ParamDef] = {}
@@ -107,7 +134,7 @@ def build_param_map(raw: dict[str, str], read_only: bool = False) -> dict[str, P
 
     # --- analog inputs (1..8) ---
     for i in range(1, 9):
-        if raw.get(f"FAIN{i}_TEMP") not in (None, "32769"):
+        if raw.get(f"FAIN{i}_TEMP") not in (None, *MISSING):
             put(_temp(f"FAIN{i}_TEMP", f"Analog input {i}"))
 
     # --- digital inputs (1..8) ---
@@ -122,8 +149,14 @@ def build_param_map(raw: dict[str, str], read_only: bool = False) -> dict[str, P
     for i in range(1, 33):
         if raw.get(f"Z{i}_SENSOR_CHN", "0") == "0":
             continue
-        put(_binary(f"Z{i}_OUTPUT", f"Zone {i} state", zone=i))
         put(_temp(f"Z{i}_TEMP", f"Zone {i} temperature", zone=i))
+        if not zone_regulated(raw, i):
+            # sonda che legge ma non pilota (es. touchscreen spostato a "Ripostiglio")
+            if raw.get(f"Z{i}_RH") not in (None, *MISSING):
+                put(ParamDef(f"Z{i}_RH", f"Zone {i} humidity", "sensor", device_class="humidity",
+                             unit="%", state_class="measurement", transform="div10", zone=i))
+            continue
+        put(_binary(f"Z{i}_OUTPUT", f"Zone {i} state", zone=i))
         # Z{i}_ZONE_MODE non esposto: i codici reali (8/130/146…) sono bitfield
         # non mappabili nell'enum e il climate mostra già modo/azione/preset.
         put(_temp(f"Z{i}_ZONE_SET", f"Zone {i} setpoint", zone=i))
@@ -141,7 +174,7 @@ def build_param_map(raw: dict[str, str], read_only: bool = False) -> dict[str, P
             put(_temp(f"Z{i}_SET_EW", f"Zone {i} E.W. setpoint", zone=i))
             put(_temp(f"Z{i}_SET_CS", f"Zone {i} C.S. setpoint", zone=i))
             put(_temp(f"Z{i}_SET_ES", f"Zone {i} E.S. setpoint", zone=i))
-        if raw.get(f"Z{i}_RH") not in (None, "32769"):
+        if raw.get(f"Z{i}_RH") not in (None, *MISSING):
             put(ParamDef(f"Z{i}_RH", f"Zone {i} humidity", "sensor", device_class="humidity",
                          unit="%", state_class="measurement", transform="div10", zone=i))
             if w:
@@ -155,7 +188,7 @@ def build_param_map(raw: dict[str, str], read_only: bool = False) -> dict[str, P
 
     # --- circuits (1..8) ---
     for i in range(1, 9):
-        if raw.get(f"C{i}_TEMP") not in (None, "32769"):
+        if raw.get(f"C{i}_TEMP") not in (None, *MISSING):
             put(_temp(f"C{i}_TEMP", f"Circuit {i} temperature"))
             put(_temp(f"C{i}_SET", f"Circuit {i} temperature setpoint"))
 
@@ -237,8 +270,9 @@ def display_value(p: ParamDef, raw: str):
     if raw is None or raw == "":
         return None
     t = p.transform
-    # 32769 (0x8001) = sensore assente/non collegato → non disponibile
-    if t in ("div10", "mul10", "signed_power") and raw == "32769":
+    # 32768/32769 = sensore assente/non collegato → non disponibile
+    # (32768 compare per un ciclo quando si collega una sonda nuova: 3276,8 °C)
+    if t in ("div10", "mul10", "signed_power") and raw in MISSING:
         return None
     try:
         if t == "div10":
