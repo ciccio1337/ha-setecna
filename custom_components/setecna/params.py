@@ -57,22 +57,42 @@ def _binary(key, name, **kw):
 MISSING = ("32768", "32769")
 
 
-def zone_label(raw: dict[str, str], zone: int) -> str | None:
-    """Nome della zona dal suo descrittore Z{i}_DESCR.
+# Tabella nomi predefiniti del portale (porting di jsZoneDesc in ows2/js/jq_orionws_bs.js)
+_DESCR_NAMES = [
+    "Zona", "Scala", "Soggiorno", "Cucina", "Salotto", "Camera", "Corridoio",
+    "Disimpegno", "Bagno", "Bagno Vasca", "Bagno Doccia", "Lavanderia", "Ufficio",
+    "Reception", "Magazzino", "Laboratorio", "Ingresso", "Zona giorno", "Zona notte",
+    "Sala da Pranzo", "Cameretta", "Studio", "Integrazione", "Termoarredo",
+]
 
-    I descrittori 240-255 indicizzano _FREEDESC1-16 (nomi delle zone) e
-    192-239 _XFREEDESC1-48 (circuiti, sorgenti, sonde): es. 242 → _FREEDESC3,
-    201 → _XFREEDESC10. _FREEDESC{zona} preso per indice non corrisponde.
+
+def descr_label(raw: dict[str, str], key: str) -> str | None:
+    """Decodifica un descrittore *_DESCR come fa il portale (jsZoneDesc).
+
+    - 240-255 → _FREEDESC1-16 (nomi liberi), es. 247 → _FREEDESC8
+    - 192-239 → _XFREEDESC1-48 (nomi liberi estesi), es. 192 → _XFREEDESC1
+    - < 192   → tabella fissa: tipo = (code >> 3) & 0x1f, sottocodice = code & 7
+                (es. 24 → "Cucina", 168 → "Studio", 42 → "Camera 2")
     """
     try:
-        d = int(raw.get(f"Z{zone}_DESCR", "0"))
-    except ValueError:
+        d = int(raw.get(key, "0"))
+    except (ValueError, TypeError):
         return None
-    if 240 <= d <= 255:
+    if d <= 0:
+        return None
+    if d >= 240:
         return raw.get(f"_FREEDESC{d - 239}") or None
-    if 192 <= d <= 239:
+    if d >= 192:
         return raw.get(f"_XFREEDESC{d - 191}") or None
-    return None
+    kind, sub = (d >> 3) & 0x1F, d & 0x07
+    if kind >= len(_DESCR_NAMES):
+        return None  # "n.d." nel portale
+    return _DESCR_NAMES[kind] + (f" {sub}" if sub else "")
+
+
+def zone_label(raw: dict[str, str], zone: int) -> str | None:
+    """Nome della zona dal suo descrittore Z{i}_DESCR."""
+    return descr_label(raw, f"Z{zone}_DESCR")
 
 
 def zone_regulated(raw: dict[str, str], zone: int) -> bool:
@@ -201,20 +221,22 @@ def build_param_map(raw: dict[str, str], read_only: bool = False) -> dict[str, P
 
     # --- deumidificatori (1..8): presenti se OUTPUT_DEUM != 255 ---
     # (l'addon li filtrava su SPEED_LOW/ECONOMY != 0, sbagliato per i tipi on/off)
-    dehum_name = {1: "Deumidificatore Dependance",
-                  2: "Deumidificatore Soggiorno",
-                  3: "Deumidificatore Camere"}
     fan_speeds = {"LOW": "low", "MED": "medium", "HIGH": "high",
                   "BOOST": "boost", "ECONOMY": "economy", "COMFORT": "comfort"}
     for i in range(1, 9):
         if raw.get(f"D{i}_OUTPUT_DEUM", "255") == "255":
             continue
-        nm = dehum_name.get(i, f"Dehumidifier {i}")
+        # nome reale dal descrittore (come il portale), es. "VMC", "Cucina"
+        nm = descr_label(raw, f"D{i}_DESCR") or f"Deumidificatore {i}"
         put(_binary(f"D{i}_OUTPUT_DEUM", f"{nm} deumidificazione"))
         put(_binary(f"D{i}_OUTPUT_RENEW", f"{nm} rinnovo aria"))
         put(_binary(f"D{i}_OUTPUT_VALV", f"{nm} valvola acqua"))
         put(_binary(f"D{i}_OUTPUT_INTG", f"{nm} integrazione"))
         put(ParamDef(f"D{i}_REQ", f"{nm} richiesta", "sensor", state_class="measurement"))
+        # velocità corrente del ventilatore: uscita 0-10V in % (65535 = uscita non configurata)
+        if raw.get(f"D{i}_OUTPUT_010", "65535") != "65535":
+            put(ParamDef(f"D{i}_OUTPUT_010", f"{nm} velocità corrente", "sensor",
+                         unit="%", state_class="measurement", transform="percent"))
         # forzatura velocità (Automatica/Bassa/Media/Alta) — scrivibile
         if w:
             put(ParamDef(f"D{i}_USER_SPEED_CONTROL", f"{nm} forzatura velocità", "select",
@@ -279,6 +301,9 @@ def display_value(p: ParamDef, raw: str):
             return round(int(raw) / 10, 1)
         if t == "mul10":
             return int(raw) * 10
+        if t == "percent":
+            v = int(raw)
+            return v if 0 <= v <= 100 else None  # 65535 = uscita non configurata
         if t == "binary":
             return raw == "1"
         if t == "enum":

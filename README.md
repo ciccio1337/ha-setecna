@@ -13,7 +13,11 @@ da un `DataUpdateCoordinator` che si ri-autentica da solo.
 - **climate** — un termostato per zona (temperatura, banda comfort/economy
   stagionale, preset *forced off/economy/comfort*, umidità se presente).
 - **sensor** — temperature, setpoint, stagione, dewpoint, contatori energia,
-  portate ventilazione, ultimo aggiornamento, ecc.
+  portate ventilazione, velocità corrente di VMC/deumidificatori (%),
+  ultimo aggiornamento, ecc.
+
+Zone e deumidificatori prendono il nome reale configurato sul portale
+(decodifica dei descrittori `*_DESCR` come in `jsZoneDesc` del portale).
 - **binary_sensor** — stati zona/sorgenti/ingressi digitali/allarmi.
 - **number** — setpoint scrivibili (zone, ACS, ventilazione, isteresi globali).
 - **select** — forzature zona/calendario.
