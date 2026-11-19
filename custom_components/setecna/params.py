@@ -233,10 +233,12 @@ def build_param_map(raw: dict[str, str], read_only: bool = False) -> dict[str, P
         put(_binary(f"D{i}_OUTPUT_VALV", f"{nm} valvola acqua"))
         put(_binary(f"D{i}_OUTPUT_INTG", f"{nm} integrazione"))
         put(ParamDef(f"D{i}_REQ", f"{nm} richiesta", "sensor", state_class="measurement"))
-        # velocità corrente del ventilatore: uscita 0-10V in % (65535 = uscita non configurata)
+        # velocità corrente del ventilatore (uscita 0-10V; 65535 = uscita non configurata).
+        # Stessa scala delle portate D{i}_SPEED_*: l'unità dipende da come l'installatore
+        # ha configurato il dispositivo (m³/h su una VMC, % su un fancoil) → nessuna unità qui.
         if raw.get(f"D{i}_OUTPUT_010", "65535") != "65535":
             put(ParamDef(f"D{i}_OUTPUT_010", f"{nm} velocità corrente", "sensor",
-                         unit="%", state_class="measurement", transform="percent"))
+                         state_class="measurement", transform="uint16"))
         # forzatura velocità (Automatica/Bassa/Media/Alta) — scrivibile
         if w:
             put(ParamDef(f"D{i}_USER_SPEED_CONTROL", f"{nm} forzatura velocità", "select",
@@ -245,18 +247,18 @@ def build_param_map(raw: dict[str, str], read_only: bool = False) -> dict[str, P
         else:
             put(ParamDef(f"D{i}_USER_SPEED_CONTROL", f"{nm} forzatura velocità", "sensor",
                          device_class="enum", transform="enum", enum_map=FORCE_SPEED))
-        # portate (m³/h) solo se realmente configurate (0/254/255 = non usate)
+        # portate solo se realmente configurate (0/254/255 = non usate)
         for code, lbl in fan_speeds.items():
             key = f"D{i}_SPEED_{code}"
             if raw.get(key, "0") not in ("0", "254", "255"):
-                # NB: sono PERCENTUALI di velocità ventilatore (50/70/100), non m³/h.
-                # La MTIO0300 fa 280/330/380 m³/h reali (Vel3/Vel2/Vel1 a 20 Pa): il vecchio
-                # mul10 + "m³/h" mostrava 500/700/1000, valori inesistenti.
+                # Valore grezzo così come impostato sulla centralina (byte, 254/255 riservati).
+                # L'unità dipende dall'impianto: % per un ventilatore (es. MTIO0300: 50/70/100),
+                # m³/h per una VMC con setpoint di portata (es. 60/80/140) → nessuna unità.
                 if w:
-                    put(ParamDef(key, f"{nm} velocità {lbl}", "number", unit="%",
-                                 state_class="measurement", min=0, max=100, step=5))
+                    put(ParamDef(key, f"{nm} velocità {lbl}", "number",
+                                 state_class="measurement", min=0, max=253, step=5))
                 else:
-                    put(ParamDef(key, f"{nm} velocità {lbl}", "sensor", unit="%",
+                    put(ParamDef(key, f"{nm} velocità {lbl}", "sensor",
                                  state_class="measurement"))
 
     # --- energy meters (1..4) --- (solo se configurati: DESCR != 0)
@@ -301,9 +303,9 @@ def display_value(p: ParamDef, raw: str):
             return round(int(raw) / 10, 1)
         if t == "mul10":
             return int(raw) * 10
-        if t == "percent":
+        if t == "uint16":
             v = int(raw)
-            return v if 0 <= v <= 100 else None  # 65535 = uscita non configurata
+            return v if 0 <= v < 65535 else None  # 65535 = uscita non configurata
         if t == "binary":
             return raw == "1"
         if t == "enum":
