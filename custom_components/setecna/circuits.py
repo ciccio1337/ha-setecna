@@ -3,7 +3,7 @@
 Reverse di station/*#tab-circuit e ows2/js/jq_orionws_bs.js:
 - presente se C{i}_XREF != 0; nome da C{i}_DESCR (jsZoneDesc)
 - C{i}_MODE: bit 0-1 = off/antigelo/economy/comfort, bit 2 = forzato
-- C{i}_OUTPUT (VOUTPUT): int16 / 10 / 16.384 = % valvola; -20000 = "CHIUSURA"
+- C{i}_OUTPUT (VOUTPUT): int16 / 10 / 16.384 = % valvola; negativo/-20000 = "CHIUSURA" → 0 %
 - C{i}_CCW_TYPE / C{i}_CCS_TYPE (TYPE_REGULATION): 0 punto fisso, 1 climatica 4 punti, …
 - curva invernale C{i}_CCW{C|E}_{M,0,10,20}: mandata a -10/0/+10/+20 °C esterni (M = -10 o punto fisso)
 - curva estiva    C{i}_CCS{C|E}_{10,20,30,40}: mandata a +10/+20/+30/+40 °C esterni
@@ -66,9 +66,11 @@ def mode_label(raw) -> str | None:
 
 def valve_percent(raw) -> float | None:
     v = s16(raw)
-    if v is None or v == -20000:  # -20000 = comando di chiusura
+    if v is None:
         return None
-    return round(v / 10 / 16.384, 1)
+    # valori negativi (-100 % o -20000) = la centralina sta comandando la chiusura:
+    # per HA la valvola è semplicemente chiusa (0 %), così storico e grafici restano puliti
+    return max(0.0, round(v / 10 / 16.384, 1))
 
 
 def reg_type(raw) -> str | None:

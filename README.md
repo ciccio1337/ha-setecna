@@ -52,8 +52,8 @@ Reverse della scheda *Circuiti* del portale; un gruppo di entità per ogni circu
 configurato (`C{i}_XREF != 0`), col nome reale del portale:
 
 - **sensor** modo (off/antigelo/economy/comfort, *forzato*), temperatura e set di
-  mandata, temperatura di ritorno (se c'è la sonda), apertura valvola % (negativo =
-  comando di chiusura), tipo di regolazione invernale/estiva.
+  mandata, temperatura di ritorno (se c'è la sonda), apertura valvola % (0 anche quando la
+  centralina comanda la chiusura), tipo di regolazione invernale/estiva.
 - **number** curva invernale comfort/economy (mandata con esterna a -10/punto fisso,
   0, +10, +20 °C), curva estiva (+10…+40 °C), correzione inverno/estate (passo 0,5 °C).
 - **image** `Circuito <nome> curva climatica` — grafico SVG della curva della stagione
