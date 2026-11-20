@@ -6,6 +6,7 @@ enum/signed_power) perché controlliamo entrambi i lati in Python.
 """
 from __future__ import annotations
 from dataclasses import dataclass, field
+from . import circuits as circ
 
 # enum maps (raw -> label)
 ZONE_MODE = {"0": "off", "2": "economy", "3": "comfort",
@@ -29,7 +30,7 @@ class ParamDef:
     device_class: str | None = None
     unit: str | None = None
     state_class: str | None = None
-    transform: str | None = None           # div10|mul10|binary|signed_power|enum|timestamp
+    transform: str | None = None           # div10|sdiv10|mul10|binary|signed_power|enum|timestamp|cmode|voutput|regtype
     options: list[str] | None = None
     enum_map: dict[str, str] | None = None  # raw -> label (display)
     cmd_map: dict[str, str] | None = None   # label -> raw (command)
@@ -41,12 +42,12 @@ class ParamDef:
 
 def _temp(key, name, **kw):
     return ParamDef(key, name, "sensor", device_class="temperature", unit="°C",
-                    state_class="measurement", transform="div10", **kw)
+                    state_class="measurement", transform="sdiv10", **kw)
 
 
-def _temp_num(key, name, mn, mx, **kw):
+def _temp_num(key, name, mn, mx, step=0.1, **kw):
     return ParamDef(key, name, "number", device_class="temperature", unit="°C",
-                    state_class="measurement", transform="div10", min=mn, max=mx, step=0.1, **kw)
+                    state_class="measurement", transform="sdiv10", min=mn, max=mx, step=step, **kw)
 
 
 def _binary(key, name, **kw):
@@ -206,11 +207,40 @@ def build_param_map(raw: dict[str, str], read_only: bool = False) -> dict[str, P
                              device_class="humidity", unit="%", state_class="measurement",
                              transform="div10", zone=i))
 
-    # --- circuits (1..8) ---
-    for i in range(1, 9):
+    # --- circuits (1..8) --- presenti se C{i}_XREF != 0, nome dal descrittore C{i}_DESCR
+    # (le chiavi C{i}_TEMP/C{i}_SET restano quelle di prima: stessi unique_id)
+    for i in circ.circuits_present(raw):
+        cn = f"Circuito {descr_label(raw, f'C{i}_DESCR') or i}"
+        put(ParamDef(f"C{i}_MODE", f"{cn} modo", "sensor", device_class="enum",
+                     transform="cmode", options=circ.MODE_OPTIONS))
         if raw.get(f"C{i}_TEMP") not in (None, *MISSING):
-            put(_temp(f"C{i}_TEMP", f"Circuit {i} temperature"))
-            put(_temp(f"C{i}_SET", f"Circuit {i} temperature setpoint"))
+            put(_temp(f"C{i}_TEMP", f"{cn} temperatura mandata"))
+        put(_temp(f"C{i}_SET", f"{cn} set mandata"))
+        if raw.get(f"C{i}_RET_TEMP") not in (None, *MISSING):
+            put(_temp(f"C{i}_RET_TEMP", f"{cn} temperatura ritorno"))
+        put(ParamDef(f"C{i}_OUTPUT", f"{cn} apertura valvola", "sensor", unit="%",
+                     state_class="measurement", transform="voutput"))
+        put(ParamDef(f"C{i}_CCW_TYPE", f"{cn} regolazione invernale", "sensor", transform="regtype"))
+        put(ParamDef(f"C{i}_CCS_TYPE", f"{cn} regolazione estiva", "sensor", transform="regtype"))
+        # limite di sicurezza mandata dell'impianto (C{i}_LIMIT_TEMP), se configurato
+        lim = circ.d10(raw.get(f"C{i}_LIMIT_TEMP")) or 0
+        hi_w = lim if lim >= 20 else 80
+        corr = [("WINTER_CORR", "correzione inverno"), ("SUMMER_CORR", "correzione estate")]
+        for suf, lbl in corr:
+            if w:
+                put(_temp_num(f"C{i}_{suf}", f"{cn} {lbl}", -10, 10, step=0.5))
+            else:
+                put(_temp(f"C{i}_{suf}", f"{cn} {lbl}"))
+        for (se, lvl), _ in circ.CURVE_KEYS.items():
+            for key, x in circ.curve_param_keys(i, se, lvl):
+                fixed = key.endswith("_M")
+                lbl = (f"{cn} curva {circ.SEASON_LABEL[se]} {lvl} "
+                       + ("esterna -10 (punto fisso)" if fixed else f"esterna {x:+d}"))
+                if w:
+                    mn, mx = (5, 30) if se == "summer" else (10, hi_w)
+                    put(_temp_num(key, lbl, mn, mx, step=0.5))
+                else:
+                    put(_temp(key, lbl))
 
     # --- sources (1..3) ---
     for i in range(1, 4):
@@ -297,9 +327,17 @@ def display_value(p: ParamDef, raw: str):
     t = p.transform
     # 32768/32769 = sensore assente/non collegato → non disponibile
     # (32768 compare per un ciclo quando si collega una sonda nuova: 3276,8 °C)
-    if t in ("div10", "mul10", "signed_power") and raw in MISSING:
+    if t in ("div10", "sdiv10", "mul10", "signed_power") and raw in MISSING:
         return None
     try:
+        if t == "sdiv10":
+            return circ.d10(raw)
+        if t == "cmode":
+            return circ.mode_label(raw)
+        if t == "voutput":
+            return circ.valve_percent(raw)
+        if t == "regtype":
+            return circ.reg_type(raw)
         if t == "div10":
             return round(int(raw) / 10, 1)
         if t == "mul10":
@@ -328,6 +366,9 @@ def command_value(p: ParamDef, value) -> str:
         return p.cmd_map.get(value, "0")
     if t == "div10":
         return str(int(round(float(value) * 10)))
+    if t == "sdiv10":
+        v = int(round(float(value) * 10))
+        return str(v + 65536 if v < 0 else v)  # int16 in complemento a due, come il portale
     if t == "mul10":
         return str(int(float(value) / 10))
     return str(value)

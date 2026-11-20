@@ -89,7 +89,9 @@ class SetecnaSensor(SetecnaEntity, SensorEntity):
         self._attr_device_class = param.device_class
         self._attr_native_unit_of_measurement = param.unit
         self._attr_state_class = param.state_class
-        if param.transform == "enum" and param.enum_map:
+        if param.options:
+            self._attr_options = list(param.options)
+        elif param.transform == "enum" and param.enum_map:
             self._attr_options = list(dict.fromkeys(param.enum_map.values()))
 
     @property

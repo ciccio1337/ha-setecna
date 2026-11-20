@@ -16,7 +16,7 @@ from .snapshot import async_register_snapshot_services
 
 PLATFORMS = [Platform.SENSOR, Platform.BINARY_SENSOR, Platform.NUMBER, Platform.SELECT,
              Platform.CLIMATE, Platform.CALENDAR, Platform.TIME, Platform.BUTTON,
-             Platform.DATE, Platform.SWITCH]
+             Platform.DATE, Platform.SWITCH, Platform.IMAGE]
 
 _MODES = sorted((set(KEY_TO_MODE) | set(LABEL_TO_MODE)) - {"unused", "non usata"})
 _DAYS = DAY_KEYS + list(DAY_GROUPS)

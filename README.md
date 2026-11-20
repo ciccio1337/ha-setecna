@@ -47,6 +47,22 @@ modo·2048 + ore·64 + minuti; modo 1 spento, 2 economy, 3 comfort).
       - {time: "18:00", mode: "off"}
   ```
 
+## Circuiti (mandata e curva climatica)
+Reverse della scheda *Circuiti* del portale; un gruppo di entità per ogni circuito
+configurato (`C{i}_XREF != 0`), col nome reale del portale:
+
+- **sensor** modo (off/antigelo/economy/comfort, *forzato*), temperatura e set di
+  mandata, temperatura di ritorno (se c'è la sonda), apertura valvola % (negativo =
+  comando di chiusura), tipo di regolazione invernale/estiva.
+- **number** curva invernale comfort/economy (mandata con esterna a -10/punto fisso,
+  0, +10, +20 °C), curva estiva (+10…+40 °C), correzione inverno/estate (passo 0,5 °C).
+- **image** `Circuito <nome> curva climatica` — grafico SVG della curva della stagione
+  attiva con il punto di lavoro (T esterna → set mandata); attributi `set_curva_comfort`
+  / `set_curva_economy` = valore della curva alla temperatura esterna attuale.
+
+Le temperature sono int16 in decimi: i valori negativi (esterna, correzioni) ora sono
+letti e scritti col segno, come fa il portale.
+
 ## Calendario stagionale
 8 date (giorno/mese, ripetute ogni anno) che cambiano climatizzazione
 (off/inverno/estate/auto), ACS e VMC: `switch` *Calendario stagionale* (abilitazione),
