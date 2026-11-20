@@ -1,5 +1,6 @@
 """Coordinator: askrefresh + fetch periodico con re-login (no MQTT)."""
 from __future__ import annotations
+import asyncio
 from datetime import timedelta
 import logging
 from homeassistant.core import HomeAssistant, callback
@@ -14,8 +15,9 @@ _LOGGER = logging.getLogger(__name__)
 class SetecnaCoordinator(DataUpdateCoordinator):
     """Tiene aggiornati i parametri del sistema Setecna."""
 
-    def __init__(self, hass: HomeAssistant, client: SetecnaClient) -> None:
-        super().__init__(hass, _LOGGER, name=DOMAIN,
+    def __init__(self, hass: HomeAssistant, client: SetecnaClient, entry=None) -> None:
+        # config_entry esplicita: obbligatoria da HA 2026.8 (prima era dedotta dal ContextVar)
+        super().__init__(hass, _LOGGER, name=DOMAIN, config_entry=entry,
                          update_interval=timedelta(seconds=DEFAULT_SCAN_INTERVAL))
         self.client = client
 
@@ -33,6 +35,20 @@ class SetecnaCoordinator(DataUpdateCoordinator):
             self.data[key] = raw  # ottimistico: la UI riflette subito
             self.async_set_updated_data(self.data)
         # il controller propaga in ~10s; confermo col valore reale dopo 30s
+        async_call_later(self.hass, 30, self._delayed_refresh)
+
+    async def async_push_many(self, items: dict[str, str]) -> None:
+        """Più comandi in sequenza (come "Applica Modifiche" del portale, uno per parametro)."""
+        if not items:
+            return
+        for i, (key, raw) in enumerate(items.items()):
+            if i:
+                await asyncio.sleep(0.3)  # non sommergere il portale
+            await self.client.push(key, raw)
+            if self.data is not None:
+                self.data[key] = raw
+        if self.data is not None:
+            self.async_set_updated_data(self.data)
         async_call_later(self.hass, 30, self._delayed_refresh)
 
     @callback

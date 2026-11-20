@@ -19,3 +19,48 @@ snapshot_restore:
       description: Ripristina i parametri Setecna
     extra:
       description: Ripristina le entità HA extra
+set_clock_program:
+  name: Imposta programma orologio
+  description: >-
+    Scrive il programma (fino a 6 fasce) di un orologio Setecna nei giorni indicati.
+    Ogni fascia vale dall'ora indicata fino alla fascia successiva.
+  fields:
+    clock:
+      name: Orologio
+      description: Nome dell'orologio come sul portale (es. Zona giorno) oppure il numero (1-8).
+      required: true
+      example: Studio
+      selector:
+        text:
+    days:
+      name: Giorni
+      description: Giorni da modificare (mon…sun) oppure weekdays, weekend, all.
+      required: true
+      example: '["weekend"]'
+      selector:
+        select:
+          multiple: true
+          options:
+            - mon
+            - tue
+            - wed
+            - thu
+            - fri
+            - sat
+            - sun
+            - weekdays
+            - weekend
+            - all
+    slots:
+      name: Fasce
+      description: 'Lista di fasce {time: "HH:MM", mode: off|economy|comfort}; vuota = giorno senza fasce.'
+      required: true
+      example: '[{"time": "08:00", "mode": "comfort"}, {"time": "18:00", "mode": "off"}]'
+      selector:
+        object:
+    system_id:
+      name: ID sistema
+      description: Solo se hai più sistemi Setecna configurati.
+      required: false
+      selector:
+        text:

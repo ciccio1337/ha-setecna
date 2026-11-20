@@ -22,6 +22,37 @@ Zone e deumidificatori prendono il nome reale configurato sul portale
 - **number** — setpoint scrivibili (zone, ACS, ventilazione, isteresi globali).
 - **select** — forzature zona/calendario.
 
+## Orologi (programmi settimanali)
+Reverse della scheda *Orologi* del portale: 7 giorni × 6 fasce per orologio, ogni
+fascia = "da quest'ora, questo modo" (`MT{orologio}{giorno}{fascia}` =
+modo·2048 + ore·64 + minuti; modo 1 spento, 2 economy, 3 comfort).
+
+- **calendar** `Orologio <nome>` — il programma della settimana come eventi
+  (sola lettura), visibile nel calendario nativo di HA.
+- **sensor** `Orologio <nome> prossimo cambio` — timestamp del prossimo cambio;
+  attributi `modo_programmato`, `modo_successivo`, `programma` (settimana completa).
+- **sensor/select** `Orologio <nome> modo attuale` / `forzatura`.
+- **Editor** (entità native, una sola serie per tutti gli orologi):
+  `select` orologio e giorno, 6 × (`time` ora + `select` modo), `button`
+  *applica al giorno / lun-ven / sab-dom / a tutti i giorni* e *annulla modifiche*,
+  `sensor` stato (allineato / modifiche da applicare). Scrive solo le fasce che cambiano.
+- **Servizio** `setecna.set_clock_program`:
+  ```yaml
+  action: setecna.set_clock_program
+  data:
+    clock: Studio            # nome come sul portale o numero 1-8
+    days: [weekend]          # mon…sun, weekdays, weekend, all
+    slots:
+      - {time: "08:00", mode: comfort}
+      - {time: "18:00", mode: "off"}
+  ```
+
+## Calendario stagionale
+8 date (giorno/mese, ripetute ogni anno) che cambiano climatizzazione
+(off/inverno/estate/auto), ACS e VMC: `switch` *Calendario stagionale* (abilitazione),
+e per ogni slot `date`, `select` climatizzazione (*non usato* svuota lo slot),
+`switch` ACS e VMC.
+
 I parametri esposti rispecchiano il modello dell'add-on originale (zone 1-32,
 ACS, sorgenti, deumidificatori, contatori energia, calendari, ingressi).
 

@@ -273,17 +273,18 @@ def build_param_map(raw: dict[str, str], read_only: bool = False) -> dict[str, P
             put(ParamDef(f"EM{i}_ACC2LO", f"Energy meter {i} total energy export", "sensor",
                          device_class="energy", unit="kWh", state_class="total_increasing", transform="div10"))
 
-    # --- calendars (1..8) ---
+    # --- orologi / calendars (1..8) --- nome reale dal descrittore MTx_DESCR
     for i in range(1, 9):
         if raw.get(f"MT{i}_XREF", "0") == "0":
             continue
-        put(ParamDef(f"MT{i}_MODE", f"Calendar {i} mode", "sensor",
+        cn = f"Orologio {descr_label(raw, f'MT{i}_DESCR') or i}"
+        put(ParamDef(f"MT{i}_MODE", f"{cn} modo attuale", "sensor",
                      device_class="enum", transform="enum", enum_map=CAL_MODE))
         if w:
-            put(ParamDef(f"MT{i}_FORCING", f"Calendar {i} preset", "select", transform="enum",
+            put(ParamDef(f"MT{i}_FORCING", f"{cn} forzatura", "select", transform="enum",
                          enum_map=FORCING, cmd_map=FORCING_CMD, options=FORCING_OPTS))
         else:
-            put(ParamDef(f"MT{i}_FORCING", f"Calendar {i} preset", "sensor",
+            put(ParamDef(f"MT{i}_FORCING", f"{cn} forzatura", "sensor",
                          device_class="enum", transform="enum", enum_map=FORCING))
 
     return m
