@@ -20,6 +20,7 @@ Zone e deumidificatori prendono il nome reale configurato sul portale
 (decodifica dei descrittori `*_DESCR` come in `jsZoneDesc` del portale).
 - **binary_sensor** — stati zona/sorgenti/ingressi digitali/allarmi.
 - **number** — setpoint scrivibili (zone, ACS, ventilazione, isteresi globali).
+- **sensor** modo di ogni zona (off/antigelo/economy/comfort, *forzato*), decodificato da `Z{i}_ZONE_MODE`.
 - **select** — forzature zona/calendario.
 
 ## Orologi (programmi settimanali)

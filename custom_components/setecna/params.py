@@ -178,8 +178,10 @@ def build_param_map(raw: dict[str, str], read_only: bool = False) -> dict[str, P
                              unit="%", state_class="measurement", transform="div10", zone=i))
             continue
         put(_binary(f"Z{i}_OUTPUT", f"Zone {i} state", zone=i))
-        # Z{i}_ZONE_MODE non esposto: i codici reali (8/130/146…) sono bitfield
-        # non mappabili nell'enum e il climate mostra già modo/azione/preset.
+        # Z{i}_ZONE_MODE è un bitfield come C{i}_MODE: bit 0-1 = off/antigelo/economy/comfort,
+        # bit 2 = forzato (verificato: 19/147 → comfort, 2 → economy, 4 → off forzato)
+        put(ParamDef(f"Z{i}_ZONE_MODE", f"Zone {i} mode", "sensor", device_class="enum",
+                     transform="cmode", options=circ.MODE_OPTIONS, zone=i))
         put(_temp(f"Z{i}_ZONE_SET", f"Zone {i} setpoint", zone=i))
         if w:
             put(ParamDef(f"Z{i}_FORCING", f"Zone {i} preset", "select", transform="enum",
